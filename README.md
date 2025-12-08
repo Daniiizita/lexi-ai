@@ -33,3 +33,50 @@ Com tecnologia avançada de processamento de linguagem natural, LEXI preserva o 
 cd translator
 python -m benchmarks.test_perfomance
 ```
+
+## 🔒 Segurança e Credenciais
+
+### Setup Inicial
+
+1. **Copie os templates de ambiente:**
+   ```bash
+   cp translator/.env.example translator/.env.development
+   cp infra/.env.example infra/.env
+   ```
+
+2. **Configure credenciais seguras:**
+   
+   **Gere senhas fortes:**
+   ```bash
+   # PostgreSQL
+   openssl rand -base64 32
+
+   # Redis
+   openssl rand -base64 32
+
+   # MinIO
+   openssl rand -base64 32
+
+   # Grafana
+   openssl rand -base64 32
+   ```
+
+3. **Obtenha token do Hugging Face:**
+   - Acesse: https://huggingface.co/settings/tokens
+   - Crie um token com permissão `read`
+   - Cole em `HF_TOKEN`
+
+### ⚠️ NUNCA Commite
+
+- Arquivos `.env` com credenciais reais
+- Tokens de API
+- Senhas em texto plano
+- Arquivo `credenciais.md` (já está no `.gitignore`)
+
+### Produção
+
+Em produção, use **Secrets Managers**:
+
+- **Kubernetes:** Secrets + Sealed Secrets
+- **Docker Swarm:** Docker Secrets
+- **Cloud:** AWS Secrets Manager / Azure Key Vault / GCP Secret Manager

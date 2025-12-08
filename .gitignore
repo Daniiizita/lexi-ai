@@ -195,3 +195,102 @@ cython_debug/
 
 #Others
 credenciais.md
+scripts/
+
+# ============================================
+# DADOS SENSÍVEIS (NUNCA COMMITAR!)
+# ============================================
+
+# Arquivos de ambiente
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+*.env
+
+# Credenciais
+credentials.json
+secrets.yaml
+config.secret.*
+*_secret.txt
+credenciais.md
+
+# Tokens e chaves
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+
+# ============================================
+# DOCKER & INFRAESTRUTURA
+# ============================================
+
+# Docker volumes com dados sensíveis
+docker-compose.override.yml
+.docker/
+
+# Kubernetes secrets
+*-secret.yaml
+secrets/
+helm/values-prod.yaml
+
+# ============================================
+# PYTHON
+# ============================================
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ============================================
+# STORAGE & LOGS
+# ============================================
+
+# Storage local
+storage/
+data/
+uploads/
+downloads/
+
+# Logs
+*.log
+logs/
+
+# ============================================
+# IDE & EDITORS
+# ============================================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+
+# ============================================
+# OUTROS
+# ============================================
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.swp

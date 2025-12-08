@@ -1,76 +1,73 @@
-version: '3.8'
-
 services:
-  # PostgreSQL para metadata
   postgres:
     image: postgres:15-alpine
     container_name: lexi-postgres
     environment:
-      POSTGRES_DB: lexi_db
-      POSTGRES_USER: lexi
-      POSTGRES_PASSWORD: lexi_secret
+      POSTGRES_DB: ${POSTGRES_DB:-lexi_db}
+      POSTGRES_USER: ${POSTGRES_USER:-lexi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD não definido}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lexi"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lexi}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis para fila + cache
   redis:
     image: redis:7-alpine
     container_name: lexi-redis
-    command: redis-server --appendonly yes
+    command: >
+      redis-server 
+      --appendonly yes 
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD não definido}
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
 
-  # MinIO para storage (S3-compatible)
   minio:
     image: minio/minio:latest
     container_name: lexi-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER não definido}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD não definido}
     volumes:
       - minio_data:/data
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
       timeout: 20s
       retries: 3
 
-  # API FastAPI
   translator:
     build: ../translator
     container_name: lexi-api
     environment:
-      - ENVIRONMENT=production
-      - DATABASE_URL=postgresql://lexi:lexi_secret@postgres:5432/lexi_db
-      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-      - LOG_LEVEL=INFO
-      - HF_TOKEN=${HF_TOKEN}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - HF_TOKEN=${HF_TOKEN:?HF_TOKEN não definido}
     volumes:
       - ../translator/app:/app/app
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,19 +77,18 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Celery Worker (GPU)
   celery-worker:
     build: ../translator
     container_name: lexi-worker
-    command: celery -A app.tasks worker --loglevel=info --concurrency=1
+    command: celery -A app.tasks worker --loglevel=${LOG_LEVEL:-info} --concurrency=1
     environment:
-      - ENVIRONMENT=production
-      - DATABASE_URL=postgresql://lexi:lexi_secret@postgres:5432/lexi_db
-      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-      - LOG_LEVEL=INFO
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - HF_TOKEN=${HF_TOKEN}
     volumes:
       - ../translator/app:/app/app
@@ -101,27 +97,18 @@ services:
       - postgres
       - minio
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
 
-  # Frontend Streamlit
   frontend:
     build: ../frontend
     container_name: lexi-frontend
     environment:
-      - API_URL=http://translator:8000
+      - API_URL=${API_URL:-http://translator:8000}
     ports:
-      - "8501:8501"
+      - "${FRONTEND_PORT:-8501}:8501"
     depends_on:
       - translator
     restart: unless-stopped
 
-  # Prometheus (Metrics)
   prometheus:
     image: prom/prometheus:latest
     container_name: lexi-prometheus
@@ -129,29 +116,27 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
     restart: unless-stopped
 
-  # Grafana (Dashboards)
   grafana:
     image: grafana/grafana:latest
     container_name: lexi-grafana
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD não definido}
       - GF_INSTALL_PLUGINS=redis-datasource
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     depends_on:
       - prometheus
     restart: unless-stopped
 
-  # Elasticsearch (Logs)
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
     container_name: lexi-elasticsearch
@@ -162,17 +147,16 @@ services:
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
-      - "9200:9200"
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
     restart: unless-stopped
 
-  # Kibana (Log Visualization)
   kibana:
     image: docker.elastic.co/kibana/kibana:8.11.0
     container_name: lexi-kibana
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     ports:
-      - "5601:5601"
+      - "${KIBANA_PORT:-5601}:5601"
     depends_on:
       - elasticsearch
     restart: unless-stopped
