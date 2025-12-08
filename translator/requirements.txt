@@ -3,7 +3,7 @@ fastapi==0.109.0
 uvicorn[standard]==0.27.0
 python-multipart==0.0.6
 
-# Machine Learning (versões compatíveis testadas)
+# Machine Learning
 transformers==4.37.2
 torch==2.1.2
 sentencepiece==0.1.99
@@ -12,6 +12,22 @@ safetensors==0.4.1
 numpy<2.0.0
 tokenizers==0.15.2
 
+# Database (NOVO)
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# Celery (NOVO)
+celery==5.3.6
+redis==5.0.1
+
+# MinIO/S3 (NOVO)
+boto3==1.34.34
+minio==7.2.3
+
+# Logging (NOVO)
+python-json-logger==2.0.7
+
 # Utilitários
 pydantic==2.5.3
 python-dotenv==1.0.0
@@ -19,7 +35,9 @@ sacremoses==0.1.1
 
 # Performance
 accelerate==0.26.1
+optimum
+onnxruntime
 
 #Testes
-pytest 
-pytest-cov
+pytest==7.4.4
+pytest-cov==4.1.0

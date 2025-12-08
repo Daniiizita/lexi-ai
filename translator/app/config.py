@@ -21,8 +21,23 @@ class Settings:
         
         # Hugging Face
         self.hf_token: Optional[str] = os.getenv("HF_TOKEN")
-        self.model_name: str = os.getenv("MODEL_NAME", "Helsinki-NLP/opus-mt-en-pt")
+        self.model_name: str = os.getenv("MODEL_NAME", "Helsinki-NLP/opus-mt-tc-big-en-pt")
         self.model_provider: str = os.getenv("MODEL_PROVIDER", "HF")
+        
+        # Database (NOVO)
+        self.database_url: str = os.getenv(
+            "DATABASE_URL",
+            "postgresql://lexi:lexi_secret@localhost:5432/lexi_db"
+        )
+        
+        # Redis/Celery (NOVO)
+        self.redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        
+        # MinIO/S3 (NOVO)
+        self.minio_endpoint: str = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
+        self.minio_access_key: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+        self.minio_secret_key: str = os.getenv("MINIO_SECRET_KEY", "minioadmin")
+        self.minio_bucket: str = os.getenv("MINIO_BUCKET", "lexi-translations")
         
         # Storage
         self.storage_dir: str = os.getenv("STORAGE_DIR", "./storage")
@@ -31,17 +46,17 @@ class Settings:
         # API
         self.api_host: str = os.getenv("API_HOST", "0.0.0.0")
         self.api_port: int = int(os.getenv("API_PORT", "8000"))
-        self.api_reload: bool = os.getenv("API_RELOAD", "false").lower() == "true"
         
-        # Logs
+        # Logs (NOVO)
         self.log_level: str = os.getenv("LOG_LEVEL", "INFO")
     
     def __repr__(self):
         return f"""Settings(
     environment={self.environment},
     model_name={self.model_name},
-    storage_dir={self.storage_dir},
-    hf_token={'***' if self.hf_token else None}
+    database_url={self.database_url.split('@')[1] if '@' in self.database_url else 'N/A'},
+    redis_url={self.redis_url},
+    log_level={self.log_level}
 )"""
 
 

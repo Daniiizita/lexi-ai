@@ -51,6 +51,17 @@ coverage.xml
 .pytest_cache/
 cover/
 
+# Benchmarks e testes
+benchmarks/__pycache__/
+tests/__pycache__/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Resultados de benchmark (opcional)
+benchmarks/results/
+*.benchmark.json
+
 # Translations
 *.mo
 *.pot
