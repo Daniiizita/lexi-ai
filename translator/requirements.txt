@@ -1,0 +1,25 @@
+# FastAPI e servidor
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Machine Learning (versões compatíveis testadas)
+transformers==4.37.2
+torch==2.1.2
+sentencepiece==0.1.99
+huggingface-hub==0.20.3
+safetensors==0.4.1
+numpy<2.0.0
+tokenizers==0.15.2
+
+# Utilitários
+pydantic==2.5.3
+python-dotenv==1.0.0
+sacremoses==0.1.1
+
+# Performance
+accelerate==0.26.1
+
+#Testes
+pytest 
+pytest-cov

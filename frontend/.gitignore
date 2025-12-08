@@ -1,0 +1,4 @@
+# envs
+.venv/
+.streamlit/
+
