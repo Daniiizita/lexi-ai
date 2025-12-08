@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: translator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: translator
+  template:
+    metadata:
+      labels:
+        app: translator
+    spec:
+      containers:
+        - name: translator
+          image: daniiizita/translator:latest
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: translator-service
+spec:
+  type: ClusterIP
+  selector:
+    app: translator
+  ports:
+    - port: 8000
+      targetPort: 8000

@@ -1,0 +1,26 @@
+
+services:
+  translator:
+    build: ../translator
+    volumes:
+      - translator_data:/data
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_PROVIDER=HF
+      - MODEL_NAME=Helsinki-NLP/opus-mt-en-pt
+      - STORAGE_DIR=/data
+    restart: unless-stopped
+
+  frontend:
+    build: ../frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://translator:8000
+    depends_on:
+      - translator
+    restart: unless-stopped
+
+volumes:
+  translator_data:
