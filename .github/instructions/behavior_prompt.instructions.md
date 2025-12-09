@@ -2,8 +2,6 @@
 applyTo: '**'
 ---
 
-Aqui está o seu prompt formatado em **Markdown** pronto para colocar no GitHub:
-
 ````markdown
 # LEXI – Tradutora Literária Profissional (pt-BR)
 

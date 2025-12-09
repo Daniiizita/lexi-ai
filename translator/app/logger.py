@@ -11,6 +11,7 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
         super().add_fields(log_record, record, message_dict)
         log_record['service'] = 'lexi-translator'
         log_record['environment'] = settings.environment
+        # ← CORRIGIDO: usa record.levelname ao invés de log_record
         log_record['level'] = record.levelname
 
 
@@ -24,10 +25,9 @@ def setup_logger(name: str = __name__) -> logging.Logger:
     # Handler para stdout (Docker/K8s)
     handler = logging.StreamHandler(sys.stdout)
     
-    # Formato JSON
+    # Formato JSON (sem rename_fields que causava o erro)
     formatter = CustomJsonFormatter(
         '%(timestamp)s %(level)s %(name)s %(message)s',
-        rename_fields={'levelname': 'level', 'asctime': 'timestamp'},
         datefmt='%Y-%m-%dT%H:%M:%S'
     )
     
