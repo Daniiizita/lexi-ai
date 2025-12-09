@@ -29,14 +29,21 @@ async def lifespan(app: FastAPI):
     print(settings)
     print("="*50 + "\n")
 
-    print("⏳ Pre-carregando modelo de tradução...")
-    get_translator()
-    print("✅ Modelo pré-carregado e pronto para uso!\n")
-
+    # NÃO carrega modelo no startup (economiza memória)
+    # get_translator()  # ← REMOVER
+    
     yield   # Aqui a aplicação começa a rodar
 
     # ----------- SHUTDOWN ----------
     print("🛑 Encerrando LEXI Translator API...")
+    
+    # Limpa GPU
+    from .router import _translator_instance
+    if _translator_instance:
+        del _translator_instance
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 # -------------------- FASTAPI APP --------------------
 

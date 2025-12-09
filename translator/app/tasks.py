@@ -42,7 +42,7 @@ def translate_book_task(
     self, 
     job_id: str, 
     minio_source_path: str,
-    batch_size: int = 16
+    batch_size: int = 4
 ):
     """
     Task principal: traduz um livro completo em chunks.

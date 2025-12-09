@@ -1,13 +1,12 @@
 from typing import List
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, NllbTokenizer
 import torch
 from .config import settings
 
 
 class HuggingFaceTranslator:
     """
-    Tradutor otimizado com GPU + TorchScript.
-    Performance: até 60x mais rápido que CPU em batch processing.
+    Tradutor otimizado com GPU + suporte para NLLB e Helsinki-NLP.
     """
     
     def __init__(self):
@@ -18,10 +17,23 @@ class HuggingFaceTranslator:
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            settings.model_name,
-            token=settings.hf_token
-        )
+        # ← DETECTA TIPO DE MODELO
+        self.is_nllb = "nllb" in settings.model_name.lower()
+        
+        if self.is_nllb:
+            print("🌐 Detectado modelo NLLB (multilíngue)")
+            self.tokenizer = NllbTokenizer.from_pretrained(
+                settings.model_name,
+                token=settings.hf_token,
+                src_lang="eng_Latn",  # Inglês
+                tgt_lang="por_Latn"   # Português
+            )
+        else:
+            print("🔤 Detectado modelo Helsinki-NLP")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                settings.model_name,
+                token=settings.hf_token
+            )
         
         self.model = AutoModelForSeq2SeqLM.from_pretrained(
             settings.model_name,
@@ -32,11 +44,6 @@ class HuggingFaceTranslator:
         
         if self.device == "cuda":
             self.model = self.model.half()  # FP16
-            
-            # 🚀 TorchScript JIT (compila o modelo)
-            # Descomente se quiser ~20% mais velocidade
-            # self.model = torch.jit.script(self.model)
-            
             print("🚀 GPU detectada! Usando CUDA + FP16")
         else:
             print("💻 Usando CPU (FP32)")
@@ -49,23 +56,47 @@ class HuggingFaceTranslator:
         if not text or len(text.strip()) == 0:
             return ""
         
-        inputs = self.tokenizer(
-            text,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=512
-        ).to(self.device)
+        # ← PREPARA INPUT CONFORME TIPO DE MODELO
+        if self.is_nllb:
+            inputs = self.tokenizer(
+                text,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=512
+            ).to(self.device)
+            
+            # NLLB precisa do target language ID
+            forced_bos_token_id = self.tokenizer.convert_tokens_to_ids("por_Latn")
+        else:
+            inputs = self.tokenizer(
+                text,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=512
+            ).to(self.device)
+            forced_bos_token_id = None
         
-        with torch.no_grad(), torch.cuda.amp.autocast():  # type: ignore # ← Mixed precision
-            outputs = self.model.generate(
-                **inputs,
-                max_length=512,
-                num_beams=4,
-                early_stopping=True,
-                do_sample=False,
-                no_repeat_ngram_size=2
-            )
+        with torch.no_grad(), torch.cuda.amp.autocast():  # type: ignore
+            if self.is_nllb and forced_bos_token_id:
+                outputs = self.model.generate(
+                    **inputs,
+                    forced_bos_token_id=forced_bos_token_id,
+                    max_length=512,
+                    num_beams=4,
+                    early_stopping=True,
+                    no_repeat_ngram_size=2
+                )
+            else:
+                outputs = self.model.generate(
+                    **inputs,
+                    max_length=512,
+                    num_beams=4,
+                    early_stopping=True,
+                    do_sample=False,
+                    no_repeat_ngram_size=2
+                )
         
         translated: str = self.tokenizer.decode(
             outputs[0],
@@ -75,10 +106,7 @@ class HuggingFaceTranslator:
         return translated
     
     def translate_batch(self, texts: List[str], batch_size: int = 16) -> List[str]:
-        """
-        Batch processing otimizado para GPU.
-        Performance: 40+ traduções/segundo em GPU moderna.
-        """
+        """Batch processing otimizado para GPU"""
         if not texts:
             return []
         
@@ -89,6 +117,12 @@ class HuggingFaceTranslator:
             return [""] * len(texts)
         
         translations = []
+        
+        # ← PREPARA TARGET LANGUAGE PARA NLLB
+        if self.is_nllb:
+            forced_bos_token_id = self.tokenizer.convert_tokens_to_ids("por_Latn")
+        else:
+            forced_bos_token_id = None
         
         for i in range(0, len(valid_texts), batch_size):
             batch = valid_texts[i:i + batch_size]
@@ -101,15 +135,24 @@ class HuggingFaceTranslator:
                 max_length=512
             ).to(self.device)
             
-            # Mixed precision + no_grad para máxima velocidade
             with torch.no_grad(), torch.cuda.amp.autocast(): # type: ignore
-                outputs = self.model.generate(
-                    **inputs,
-                    max_length=512,
-                    num_beams=4,
-                    early_stopping=True,
-                    no_repeat_ngram_size=2
-                )
+                if self.is_nllb and forced_bos_token_id:
+                    outputs = self.model.generate(
+                        **inputs,
+                        forced_bos_token_id=forced_bos_token_id,
+                        max_length=512,
+                        num_beams=4,
+                        early_stopping=True,
+                        no_repeat_ngram_size=2
+                    )
+                else:
+                    outputs = self.model.generate(
+                        **inputs,
+                        max_length=512,
+                        num_beams=4,
+                        early_stopping=True,
+                        no_repeat_ngram_size=2
+                    )
             
             batch_translations = self.tokenizer.batch_decode(
                 outputs,
@@ -121,6 +164,10 @@ class HuggingFaceTranslator:
         result = [""] * len(texts)
         for idx, translation in zip(valid_indices, translations):
             result[idx] = translation
+        
+        # ← ADICIONAR: Limpa cache entre batches
+        if self.device == "cuda":
+            torch.cuda.empty_cache()
         
         return result
     
