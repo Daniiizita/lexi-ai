@@ -1,8 +1,11 @@
+import time
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from typing import Optional, List
 from contextlib import asynccontextmanager
 import uuid
 import os
+from prometheus_client import make_asgi_app
+from fastapi.responses import Response
 
 from starlette.types import Lifespan
 
@@ -16,7 +19,14 @@ from .router import get_translator
 from .config import settings
 from .tasks import translate_book_task, health_check_task
 from .infraestructure.storage.minio_client import get_minio_client
-
+from .metrics import (
+    http_requests_total,
+    http_request_duration_seconds,
+    update_gpu_metrics,
+    set_model_info,
+    active_translation_jobs,
+    track_translation
+)
 
 # -------------------- LIFESPAN CORRETO --------------------
 @asynccontextmanager
@@ -29,8 +39,12 @@ async def lifespan(app: FastAPI):
     print(settings)
     print("="*50 + "\n")
 
-    # NÃO carrega modelo no startup (economiza memória)
-    # get_translator()  # ← REMOVER
+    # Define informações do modelo para Prometheus
+    set_model_info(
+        model_name=settings.model_name,
+        model_provider=settings.model_provider,
+        environment=settings.environment
+    )
     
     yield   # Aqui a aplicação começa a rodar
 
@@ -53,6 +67,30 @@ app = FastAPI(
     description="API de tradução literária EN→PT usando modelos open-source",
     lifespan=lifespan
 )
+
+# ==================== PROMETHEUS METRICS ====================
+
+from prometheus_client import REGISTRY, generate_latest
+from fastapi.responses import Response
+
+# ← CORREÇÃO: Remove decorator @app.get e permite ambos GET/HEAD
+@app.api_route("/metrics", methods=["GET", "HEAD"], include_in_schema=False)
+async def metrics():
+    """Endpoint de métricas Prometheus (suporta GET e HEAD)"""
+    
+    # Atualiza métricas de GPU antes de retornar
+    update_gpu_metrics()
+    
+    # Gera métricas no formato Prometheus
+    metrics_output = generate_latest(REGISTRY)
+    
+    return Response(
+        content=metrics_output,
+        media_type="text/plain; version=0.0.4; charset=utf-8"
+    )
+
+# Alternativa: mount na raiz (se preferir usar middleware)
+# app.mount("/metrics", metrics_app)
 
 # -------------------- ROTAS --------------------
 @app.get("/health")
@@ -94,6 +132,7 @@ def translate_chunk(chunk: ChunkInput):
 
 
 @app.post("/translate/sync", response_model=TranslationResponse)
+@track_translation(endpoint="sync", batch_size=1)
 def translate_sync(req: TranslationRequest):
     """Tradução síncrona simples para testes rápidos"""
     if not req.text or len(req.text.strip()) == 0:
@@ -240,6 +279,7 @@ def health_minio():
 
 
 @app.post("/translate/batch", response_model=List[ChunkOutput])
+@track_translation(endpoint="batch", batch_size=16)
 def translate_batch(chunks: List[ChunkInput]):
     """
     Tradução em batch (até 5x mais rápido que individual).
@@ -268,3 +308,30 @@ def translate_batch(chunks: List[ChunkInput]):
         ))
     
     return outputs
+
+
+# ← MIDDLEWARE: rastreia todas as requisições
+@app.middleware("http")
+async def track_requests(request, call_next):
+    start = time.time()
+    
+    response = await call_next(request)
+    
+    duration = time.time() - start
+    
+    http_requests_total.labels(
+        method=request.method,
+        endpoint=request.url.path,
+        status=response.status_code
+    ).inc()
+    
+    http_request_duration_seconds.labels(
+        method=request.method,
+        endpoint=request.url.path
+    ).observe(duration)
+    
+    # Atualiza métricas de GPU periodicamente
+    if request.url.path.startswith("/translate"):
+        update_gpu_metrics()
+    
+    return response

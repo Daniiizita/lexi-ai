@@ -1,17 +1,27 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    cluster: 'lexi-dev'
+    environment: 'development'
 
 scrape_configs:
+  # ==================== LEXI API ====================
   - job_name: 'lexi-api'
     static_configs:
-      - targets: ['translator:8000']
+      # ← CORREÇÃO: Se API roda no HOST (fora do Docker)
+      - targets: ['host.docker.internal:8000']
+        labels:
+          service: 'translator-api'
+      
+      # ← ALTERNATIVA: Se API roda em container
+      # - targets: ['translator:8000']
+    
     metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
   
-  - job_name: 'redis'
+  # ==================== PROMETHEUS SELF ====================
+  - job_name: 'prometheus'
     static_configs:
-      - targets: ['redis:6379']
-  
-  - job_name: 'postgres'
-    static_configs:
-      - targets: ['postgres:5432']
+      - targets: ['localhost:9090']

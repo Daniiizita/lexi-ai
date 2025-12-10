@@ -1,0 +1,186 @@
+{
+  "dashboard": {
+    "title": "LEXI Translation Monitor",
+    "uid": "lexi-translation-overview",
+    "timezone": "browser",
+    "editable": true,
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "📊 Traduções por Minuto",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(lexi_translation_requests_total{status=\"success\"}[1m]) * 60",
+            "legendFormat": "{{endpoint}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Traduções/min"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 2,
+        "title": "🎮 Memória GPU (GB)",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "lexi_gpu_memory_used_bytes / 1e9",
+            "legendFormat": "{{device}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "decgbytes", "label": "Memória"},
+          {"format": "short"}
+        ],
+        "thresholds": [
+          {"value": 6.5, "color": "orange"},
+          {"value": 7.5, "color": "red"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "⏱️ Latência de Tradução (p95)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(lexi_translation_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{endpoint}} - p95",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(lexi_translation_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{endpoint}} - p50",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Latência"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 4,
+        "title": "🔢 Chunks Processados",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(lexi_translation_chunks_processed_total[5m]) * 60",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Chunks/min"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "🚀 Jobs Ativos",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 16, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "lexi_active_translation_jobs",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 5, "color": "yellow"},
+            {"value": 10, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 6,
+        "title": "📈 Taxa de Sucesso",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 16, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(rate(lexi_translation_requests_total{status=\"success\"}[5m])) / sum(rate(lexi_translation_requests_total[5m])) * 100",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "unit": "percent"
+        },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 90, "color": "yellow"},
+            {"value": 98, "color": "green"}
+          ]
+        }
+      },
+      {
+        "id": 7,
+        "title": "🎯 Utilização GPU (%)",
+        "type": "gauge",
+        "gridPos": {"x": 12, "y": 16, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "lexi_gpu_utilization_percent",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 70, "color": "yellow"},
+            {"value": 90, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 8,
+        "title": "📊 Tokens Traduzidos",
+        "type": "stat",
+        "gridPos": {"x": 18, "y": 16, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(lexi_translation_tokens_processed_total)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "none",
+          "graphMode": "area",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -16,6 +16,7 @@ from .database import get_db
 from .models import TranslationJob, TranslationChunk
 from .logger import logger
 from .infraestructure.storage.minio_client import get_minio_client
+from .chunking import IntelligentChunker
 
 # Inicializa Celery
 celery_app = Celery(
@@ -175,62 +176,31 @@ def translate_book_task(
             raise
 
 
-def _split_into_chunks(text: str, max_tokens: int = 512) -> List[str]:
+def _split_into_chunks(text: str, max_tokens: int = 450) -> List[str]:
     """
-    Divide texto em chunks com overlap para manter contexto.
+    Divide texto em chunks inteligentes usando tokenizer do modelo.
     
-    TODO: Melhorar com tokenização real do modelo
+    Args:
+        text: Texto completo
+        max_tokens: Tokens máximos por chunk (deixa margem para especiais)
+    
+    Returns:
+        Lista de textos dos chunks (sem metadados)
     """
-    # Split em parágrafos primeiro (melhor quebra semântica)
-    paragraphs = text.split('\n\n')
+    chunker = IntelligentChunker(
+        model_name=settings.model_name,
+        max_tokens=max_tokens,
+        overlap_tokens=50  # ~10% de overlap
+    )
     
-    chunks = []
-    current_chunk = []
-    current_length = 0
+    chunks_with_meta = chunker.chunk_text(text)
     
-    for para in paragraphs:
-        words = para.split()
-        para_length = len(words)
-        
-        if current_length + para_length <= max_tokens:
-            # Adiciona parágrafo ao chunk atual
-            current_chunk.append(para)
-            current_length += para_length
-        else:
-            # Salva chunk atual se não estiver vazio
-            if current_chunk:
-                chunks.append('\n\n'.join(current_chunk))
-            
-            # Inicia novo chunk com parágrafo atual
-            if para_length > max_tokens:
-                # Parágrafo muito grande: divide em sentenças
-                sentences = para.split('. ')
-                temp_chunk = []
-                temp_length = 0
-                
-                for sent in sentences:
-                    sent_words = sent.split()
-                    if temp_length + len(sent_words) <= max_tokens:
-                        temp_chunk.append(sent)
-                        temp_length += len(sent_words)
-                    else:
-                        if temp_chunk:
-                            chunks.append('. '.join(temp_chunk) + '.')
-                        temp_chunk = [sent]
-                        temp_length = len(sent_words)
-                
-                if temp_chunk:
-                    chunks.append('. '.join(temp_chunk) + '.')
-                
-                current_chunk = []
-                current_length = 0
-            else:
-                current_chunk = [para]
-                current_length = para_length
+    # Extrai apenas os textos (descarta metadados por enquanto)
+    chunks = [chunk_text for chunk_text, _ in chunks_with_meta]
     
-    # Adiciona último chunk
-    if current_chunk:
-        chunks.append('\n\n'.join(current_chunk))
+    # Log de estatísticas
+    stats = chunker.get_stats(chunks_with_meta)
+    logger.info(f"📊 Chunking stats: {stats}")
     
     return chunks
 
