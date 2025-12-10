@@ -1,26 +1,88 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
 
 jobs:
-  lint-test:
+  test:
     runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: lexi_test
+          POSTGRES_USER: lexi
+          POSTGRES_PASSWORD: test123
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
     steps:
       - uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: 'pip'
       
-      - name: Install deps
+      - name: Install dependencies
         run: |
-          pip install -r translator/requirements.txt
+          cd translator
+          pip install -r requirements.txt
       
-      - name: Basic import test
+      - name: Run unit tests
         run: |
-          python -c "import transformers; print('ok')"
+          cd translator
+          pytest tests/test_translation.py tests/test_chunking.py -v
+      
+      - name: Run linting
+        run: |
+          cd translator
+          pip install ruff
+          ruff check app/
+      
+      - name: Check code formatting
+        run: |
+          cd translator
+          pip install black
+          black --check app/
+  
+  build-docker:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build translator image
+        run: |
+          cd translator
+          docker build -t lexi-translator:latest .
+      
+      - name: Build frontend image
+        run: |
+          cd frontend
+          docker build -t lexi-frontend:latest .

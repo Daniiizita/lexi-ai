@@ -5,8 +5,11 @@ import time
 from typing import List, Dict
 
 
-# Prioriza variável de ambiente, depois secrets, depois fallback local
-API_URL = os.getenv("API_URL") or st.secrets.get("API_URL", "http://localhost:8000")
+# ← CORREÇÃO: Trata ausência de API_URL gracefully
+try:
+    API_URL = os.getenv("API_URL") or st.secrets.get("API_URL", "http://localhost:8000")
+except Exception:
+    API_URL = "http://localhost:8000"  # Fallback seguro
 
 
 st.set_page_config(
@@ -87,20 +90,27 @@ with st.sidebar:
     
     # Status da API
     st.subheader("🔌 Status da API")
+    
+    # ← CORREÇÃO COMPLETA: Error handling robusto
+    api_status = "unknown"
+    api_data = {}
+    
     try:
-        health = requests.get(f"{API_URL}/health", timeout=2)
+        health = requests.get(f"{API_URL}/health", timeout=5)
+        
         if health.status_code == 200:
-            data = health.json()
+            api_data = health.json()
+            api_status = "online"
             st.success("✅ API Online")
             
-            # Métricas formatadas com HTML customizado
-            model_short = data.get("model_name", "N/A").split('/')[-1]
+            # Métricas formatadas
+            model_short = api_data.get("model_name", "N/A").split('/')[-1]
             
             metrics_html = f"""
             <div class="custom-metric-grid">
                 <div class="custom-metric-card">
                     <div class="custom-metric-label">Ambiente</div>
-                    <div class="custom-metric-value" style="font-size: 1.2rem;">{data.get("environment", "N/A")}</div>
+                    <div class="custom-metric-value" style="font-size: 1.2rem;">{api_data.get("environment", "N/A")}</div>
                 </div>
                 <div class="custom-metric-card">
                     <div class="custom-metric-label">Modelo</div>
@@ -112,31 +122,84 @@ with st.sidebar:
             
             # Expander com detalhes técnicos
             with st.expander("🔍 Detalhes técnicos"):
-                st.json(data)
+                st.json(api_data)
         else:
+            api_status = "error"
             st.error("❌ API com problemas")
-    except Exception as e:
-        st.error("❌ API offline")
-        st.caption(f"Erro: {str(e)[:50]}")
-        st.info("💡 Inicie a API:\n```bash\ncd translator\nuvicorn app.main:app --reload\n```")
+            st.caption(f"Status HTTP: {health.status_code}")
+            
+            # Mostra resposta de erro
+            with st.expander("🔍 Detalhes do erro"):
+                st.code(health.text)
     
+    except requests.exceptions.ConnectionError:
+        api_status = "offline"
+        st.error("❌ API offline")
+        st.caption(f"URL: `{API_URL}`")
+        
+        # ← CORREÇÃO: Instruções práticas
+        with st.expander("💡 Como resolver"):
+            st.markdown("""
+            **Verifique se o container está rodando:**
+            ```bash
+            docker ps | grep lexi-api
+            ```
+            
+            **Veja os logs:**
+            ```bash
+            docker logs lexi-api --tail=50
+            ```
+            
+            **Reinicie o container:**
+            ```bash
+            docker-compose -f infra/docker-compose.yml restart translator
+            ```
+            """)
+    
+    except requests.exceptions.Timeout:
+        api_status = "slow"
+        st.warning("⚠️ API lenta")
+        st.caption("Timeout após 5s")
+        st.info("A API pode estar carregando o modelo. Aguarde ~60s e recarregue.")
+    
+    except requests.exceptions.RequestException as e:
+        api_status = "error"
+        st.error("❌ Erro de conexão")
+        st.caption(f"Erro: {str(e)[:150]}")
+    
+    except Exception as e:
+        api_status = "error"
+        st.error("❌ Erro desconhecido")
+        st.caption(f"Tipo: {type(e).__name__}")
+        with st.expander("🔍 Stack trace"):
+            import traceback
+            st.code(traceback.format_exc())
+
     st.divider()
+    
+    # ← ADICIONA: Alerta visual se API estiver offline
+    if api_status != "online":
+        st.warning("⚠️ Funcionalidades limitadas enquanto API estiver offline")
     
     # Configurações de tradução
     st.subheader("🎛️ Configurações de Tradução")
+    
+    # ← CORREÇÃO: Desabilita controles se API offline
     batch_size = st.slider(
         "Batch Size",
         min_value=4,
         max_value=32,
         value=16,
         step=4,
-        help="Maior = mais rápido (requer mais VRAM)"
+        help="Maior = mais rápido (requer mais VRAM)",
+        disabled=(api_status != "online")
     )
     
     preserve_formatting = st.checkbox(
         "Preservar formatação",
         value=True,
-        help="Mantém negrito, itálico, etc."
+        help="Mantém negrito, itálico, etc.",
+        disabled=(api_status != "online")
     )
     
     show_technical_details = st.checkbox(
@@ -457,8 +520,8 @@ col_footer1, col_footer2, col_footer3 = st.columns([2, 1, 1])
 with col_footer1:
     st.caption("LEXI AI v1.0.0 | Powered by Helsinki-NLP")
 with col_footer2:
-    if st.button("📖 Documentação"):
-        st.markdown("[GitHub](https://github.com/Daniiizita/lexi-ai)")
+    # ← CORREÇÃO: Usa markdown direto (sem button)
+    st.markdown("[📖 Documentação](https://github.com/Daniiizita/lexi-ai)")
 with col_footer3:
-    if st.button("🐛 Reportar Bug"):
-        st.markdown("[Issues](https://github.com/Daniiizita/lexi-ai/issues)")
+    # ← CORREÇÃO: Usa markdown direto
+    st.markdown("[🐛 Reportar Bug](https://github.com/Daniiizita/lexi-ai/issues)")

@@ -1,7 +1,23 @@
+---
+# ConfigMap com configurações
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lexi-config
+data:
+  ENVIRONMENT: "production"
+  MODEL_NAME: "facebook/nllb-200-distilled-600M"
+  MODEL_PROVIDER: "HF"
+  LOG_LEVEL: "INFO"
+
+---
+# Deployment da API
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: translator
+  labels:
+    app: translator
 spec:
   replicas: 1
   selector:
@@ -14,21 +30,55 @@ spec:
     spec:
       containers:
         - name: translator
-          image: daniiizita/translator:latest
+          image: docker.io/daniikat/lexi-translator:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
+              name: http
+          env:
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: lexi-config
+                  key: ENVIRONMENT
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lexi-secrets
+                  key: hf-token
+            - name: MODEL_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: lexi-config
+                  key: MODEL_NAME
           resources:
             requests:
-              cpu: "250m"
-              memory: "256Mi"
-            limits:
               cpu: "500m"
-              memory: "512Mi"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
 ---
+# Service da API
 apiVersion: v1
 kind: Service
 metadata:
   name: translator-service
+  labels:
+    app: translator
 spec:
   type: ClusterIP
   selector:
@@ -36,3 +86,57 @@ spec:
   ports:
     - port: 8000
       targetPort: 8000
+      name: http
+
+---
+# Deployment Frontend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: docker.io/daniikat/lexi-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8501
+              name: http
+          env:
+            - name: API_URL
+              value: "http://translator-service:8000"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+---
+# Service Frontend
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  labels:
+    app: frontend
+spec:
+  type: LoadBalancer  # ← Muda para NodePort se LoadBalancer não disponível
+  selector:
+    app: frontend
+  ports:
+    - port: 8501
+      targetPort: 8501
+      name: http
